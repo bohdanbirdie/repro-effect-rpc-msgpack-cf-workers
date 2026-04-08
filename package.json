@@ -9,7 +9,7 @@
   "dependencies": {
     "effect": "^3.21.0",
     "@effect/rpc": "^0.75.0",
-    "@effect/platform": "^0.78.0",
+    "@effect/platform": "^0.96.0",
     "msgpackr": "^1.11.4"
   },
   "devDependencies": {
