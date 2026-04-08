@@ -1,35 +1,16 @@
 /**
- * Reproduction: @effect/rpc RpcSerialization.msgPack fails on Cloudflare Workers
+ * FIXED: Uses patched @effect/rpc with configurable msgpackr options.
  *
- * new Packr() enables records by default (undefined != false → this.structures = []).
- * When a single pack() contains 3+ objects with the same key structure, the Unpackr's
- * readObject.count exceeds inlineObjectReadThreshold (2) and triggers JIT compilation
- * via new Function() — which CF Workers blocks during request handling.
+ * The patch changes RpcSerialization.msgPack from a value to a function
+ * accepting optional msgpackr.Options, and fixes the silent error swallowing.
  *
- * RpcSerialization.msgPack's catch block silently swallows the error and returns [].
+ * Compare with the `main` branch to see the "before" state.
  *
- * Prerequisites:
- *   - Deployed to CF Workers (miniflare does not enforce new Function() restriction)
- *   - allow_eval_during_startup compat flag (so msgpackr's startup probe passes)
- *
- * Deploy: cd packages/rpc/repro-cf-worker && npx wrangler deploy
- * Test:   curl https://<worker>.workers.dev/test
+ * Deploy: npx wrangler deploy
+ * Test:   curl https://<worker>.workers.dev
  */
 
-import { Packr, Unpackr } from "msgpackr"
-
-// Reproduces the exact decode logic from RpcSerialization.ts lines 358-391
-function rpcDecode(unpackr: Unpackr, bytes: Uint8Array): ReadonlyArray<unknown> {
-  try {
-    return unpackr.unpackMultiple(bytes)
-  } catch (error_) {
-    const error = error_ as any
-    if (error.incomplete) {
-      return error.values ?? []
-    }
-    return [] // ← THE BUG: silently swallows EvalError from blocked new Function()
-  }
-}
+import { RpcSerialization } from "@effect/rpc"
 
 // Typical @effect/rpc message shape — 4 nested objects sharing {_tag, ...} structure
 const RPC_PAYLOAD = {
@@ -45,45 +26,35 @@ const RPC_PAYLOAD = {
 
 export default {
   async fetch(): Promise<Response> {
-    // Same as RpcSerialization.msgPack: new Packr()/Unpackr() with no options
-    const packr = new Packr()
-    const unpackr = new Unpackr()
+    // FIXED: pass { useRecords: false } to avoid msgpackr JIT new Function()
+    const parser = RpcSerialization.msgPack({ useRecords: false }).unsafeMake()
 
-    const encoded = packr.pack(RPC_PAYLOAD)
+    const encoded = parser.encode(RPC_PAYLOAD)
+    const decoded = parser.decode(encoded as Uint8Array)
 
-    // 1. Raw decode — shows the actual error
-    let rawError: string | null = null
+    // Without the fix (default options) — would throw EvalError, silently swallowed to []
+    let defaultError: string | null = null
     try {
-      unpackr.unpackMultiple(encoded)
+      const defaultParser = RpcSerialization.msgPack().unsafeMake()
+      const defaultEncoded = defaultParser.encode(RPC_PAYLOAD)
+      defaultParser.decode(defaultEncoded as Uint8Array)
     } catch (e: any) {
-      rawError = `${e.constructor.name}: ${e.message}`
-    }
-
-    // 2. RpcSerialization-style decode — silently returns []
-    const swallowed = rpcDecode(new Unpackr(), encoded)
-
-    // 3. Fixed: useRecords: false — no JIT, no error
-    const fixedPackr = new Packr({ useRecords: false })
-    const fixedUnpackr = new Unpackr({ useRecords: false })
-    const fixedEncoded = fixedPackr.pack(RPC_PAYLOAD)
-    let fixedResult: unknown[]
-    try {
-      fixedResult = fixedUnpackr.unpackMultiple(fixedEncoded) as unknown[]
-    } catch (e: any) {
-      fixedResult = [{ error: e.message }]
+      // With the patch, errors are rethrown instead of silently returning []
+      defaultError = `${e.constructor.name}: ${e.message}`
     }
 
     return Response.json({
-      bug: {
-        raw_error: rawError,
-        rpcSerialization_result: swallowed,
-        rpcSerialization_length: swallowed.length,
-        silently_swallowed: swallowed.length === 0 && rawError !== null
+      fixed: {
+        useRecords_false: true,
+        decoded_length: decoded.length,
+        decoded: decoded
       },
-      fix: {
-        useRecords_false_result: fixedResult,
-        useRecords_false_length: fixedResult.length
+      default_options: {
+        error: defaultError,
+        note: defaultError
+          ? "Default options trigger JIT new Function() — now properly rethrown instead of silently swallowed"
+          : "No error (JIT threshold may not have been reached)"
       }
-    }, { headers: { "content-type": "application/json" } })
+    })
   }
 }

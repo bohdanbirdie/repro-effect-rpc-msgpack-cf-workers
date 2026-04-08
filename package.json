@@ -3,14 +3,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "effect": "^3.21.0",
+    "@effect/rpc": "^0.75.0",
+    "@effect/platform": "^0.78.0",
     "msgpackr": "^1.11.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250327.0",
     "wrangler": "^4.14.0",
     "typescript": "^5.8.0"
+  },
+  "patchedDependencies": {
+    "@effect/rpc@0.75.0": "patches/@effect%2Frpc@0.75.0.patch"
   }
 }

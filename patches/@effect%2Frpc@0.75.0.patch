@@ -1,0 +1,37 @@
+diff --git a/dist/esm/RpcSerialization.js b/dist/esm/RpcSerialization.js
+index a28fe2fc7bced37c01657e4664c63b56fcac1c81..98cffc8ad8129e7448d828f6e4c19202e4c0edc0 100644
+--- a/dist/esm/RpcSerialization.js
++++ b/dist/esm/RpcSerialization.js
+@@ -268,12 +268,12 @@ const jsonRpcInternalError = -32603;
+  * @since 1.0.0
+  * @category serialization
+  */
+-export const msgPack = /*#__PURE__*/RpcSerialization.of({
++export const msgPack = options => RpcSerialization.of({
+   contentType: "application/msgpack",
+   includesFraming: true,
+   unsafeMake: () => {
+-    const unpackr = new Msgpackr.Unpackr();
+-    const packr = new Msgpackr.Packr();
++    const unpackr = new Msgpackr.Unpackr(options);
++    const packr = new Msgpackr.Packr(options);
+     const encoder = new TextEncoder();
+     let incomplete = undefined;
+     return {
+@@ -295,7 +295,7 @@ export const msgPack = /*#__PURE__*/RpcSerialization.of({
+             incomplete = buf.subarray(error.lastPosition);
+             return error.values ?? [];
+           }
+-          return [];
++          throw error_;
+         }
+       },
+       encode: response => packr.pack(response)
+@@ -346,5 +346,5 @@ export const layerNdJsonRpc = options => Layer.succeed(RpcSerialization, ndJsonR
+  * @since 1.0.0
+  * @category serialization
+  */
+-export const layerMsgPack = /*#__PURE__*/Layer.succeed(RpcSerialization, msgPack);
++export const layerMsgPack = options => Layer.succeed(RpcSerialization, msgPack(options));
+ //# sourceMappingURL=RpcSerialization.js.map
+\ No newline at end of file
