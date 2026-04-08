@@ -1,0 +1,8 @@
+{
+  "name": "repro-cf-rpc-msgpack",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  // allow_eval_during_startup: lets msgpackr's startup probe pass (threshold = 2)
+  // but new Function() is still blocked during request handling — the trap
+  "compatibility_flags": ["nodejs_compat", "allow_eval_during_startup"]
+}
